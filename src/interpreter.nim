@@ -1,4 +1,4 @@
-import sequtils
+import sequtils, tables, hashes
 
 type TermKind = enum
   Variable
@@ -11,21 +11,51 @@ type Term = ref object
   of Atom:
     atomValue: string
 
+proc `==`(a, b: Term): bool =
+  case a.kind
+  of Variable:
+    a.kind == b.kind and
+      a.variableName == b.variableName
+  of Atom:
+    a.kind == b.kind and
+      a.atomValue == b.atomValue
+
+proc hash(t: Term): Hash =
+  case t.kind
+  of Variable:
+    result = !$t.variableName.hash
+  of Atom:
+    result = !$t.atomValue.hash
+
 type Predicate = ref object
   name: string
   arguments: seq[Term]
 
 type Horn = ref object
   consequent: Predicate
-  antecedent: seq[Term]
+  antecedent: seq[Predicate]
 
 type Interpreter = ref object
   truths: seq[Horn]
 
-func is_true(interpreter: Interpreter, predicate: Predicate): bool =
-  interpreter.truths.any(proc (horn: Horn): bool =
-    horn.consequent.name == predicate.name and
-      zip(horn.consequent.arguments, predicate.arguments).anyIt(
-        it[0].kind == Variable or (it[0].kind == Atom and it[0].atomValue == it[1].atomValue)
+proc is_true(interpreter: Interpreter, question: Predicate): bool =
+  let can_be_base = interpreter.truths.filterIt(it.consequent.name == question.name)
+
+  can_be_base.any(proc (horn: Horn): bool =
+    let assignment = zip(horn.consequent.arguments, question.arguments)
+    
+    if not assignment.allIt(
+      it[0].kind == Variable or (it[0].kind == Atom and it[0].atomValue == it[1].atomValue)
+    ): return false
+
+    if horn.antecedent.len == 0: return true
+
+    horn.antecedent.all(proc (predicate: Predicate): bool = 
+      let unificated = Predicate(
+        name: predicate.name,
+        arguments: predicate.arguments.mapIt(assignment.toTable[it])
       )
+
+      interpreter.is_true(unificated)
+    )
   )
