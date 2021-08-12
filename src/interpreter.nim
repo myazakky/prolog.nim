@@ -1,4 +1,4 @@
-import sequtils, tables, hashes
+import sequtils, strformat, tables, hashes
 
 type TermKind = enum
   Variable
@@ -11,51 +11,133 @@ type Term = ref object
   of Atom:
     atomValue: string
 
-proc `==`(a, b: Term): bool =
-  case a.kind
-  of Variable:
-    a.kind == b.kind and
-      a.variableName == b.variableName
-  of Atom:
-    a.kind == b.kind and
-      a.atomValue == b.atomValue
-
 proc hash(t: Term): Hash =
   case t.kind
   of Variable:
-    result = !$t.variableName.hash
+    t.variableName.hash
   of Atom:
-    result = !$t.atomValue.hash
+    t.atomValue.hash
 
-type Predicate = ref object
+func `$`(t: Term): string =
+  case t.kind:
+  of Variable: t.variableName
+  of Atom: t.atomValue
+
+func `==`(t, u: Term): bool =
+  if t.kind != u.kind: return false
+
+  case t.kind
+  of Variable:
+    t.variableName == u.variableName
+  of Atom:
+    t.atomValue == u.atomValue
+
+type Literal = ref object
+  is_negative: bool
   name: string
   arguments: seq[Term]
 
-type Horn = ref object
-  consequent: Predicate
-  antecedent: seq[Predicate]
+func `¬`(literal: Literal): Literal =
+  Literal(
+    is_negative: not literal.is_negative,
+    name: literal.name,
+    arguments: literal.arguments)
 
-type Interpreter = ref object
-  truths: seq[Horn]
+func `$`(l: Literal): string =
+  let prefix = if l.is_negative: "¬" else: ""
+  result = prefix & l.name & $l.arguments
 
-proc is_true(interpreter: Interpreter, question: Predicate): bool =
-  let can_be_base = interpreter.truths.filterIt(it.consequent.name == question.name)
+func `==`(l, m: Literal): bool = 
+  l.is_negative == m.is_negative and l.name == m.name
 
-  can_be_base.any(proc (horn: Horn): bool =
-    let assignment = zip(horn.consequent.arguments, question.arguments)
-    
-    if not assignment.allIt(
-      it[0].kind == Variable or (it[0].kind == Atom and it[0].atomValue == it[1].atomValue)
-    ): return false
+func `===`(l, m: Literal): bool =
+  l == m and (l.arguments == m.arguments)
 
-    if horn.antecedent.len == 0: return true
+type Clause = seq[Literal]
 
-    horn.antecedent.all(proc (predicate: Predicate): bool = 
-      let unificated = Predicate(
-        name: predicate.name,
-        arguments: predicate.arguments.mapIt(assignment.toTable[it])
-      )
+type Unificate = seq[tuple[a: Term, b: Term]]
 
-      interpreter.is_true(unificated)
+func unificate(c: Clause, u: Unificate): Clause =
+  let unification_table = u.toTable
+  c.map(proc(l: Literal): Literal =
+    let arguments = l.arguments.mapIt(
+      if it.kind == Variable: unification_table[it]
+      else: it
     )
+    Literal(
+      is_negative: l.is_negative,
+      name: l.name,
+      arguments: arguments))
+
+type Interpreter = seq[Clause]
+
+proc resolute(c1, c2: Clause): Clause =
+  if c1.len >= c2.len:
+    c1.filter(proc (l: Literal): bool =
+      not c2.anyIt(it === ¬ l))
+  else:
+    c2.filter(proc (l: Literal): bool =
+      not c1.anyIt(it === ¬ l))
+
+proc can_make_unificate(l1, l2: Literal): bool =
+  var i = 0
+  l1.arguments.all(
+    proc(t: Term): bool =
+      result = if t.kind == Atom and l2.arguments[i].kind == Atom: t.atomValue == l2.arguments[i].atomValue
+               else: true
+      i.inc
   )
+
+proc make_unificate(l1, l2: Literal): Unificate =
+  var i = 0
+  l1.arguments.map(
+    proc(t: Term): tuple[a: Term, b: Term] =
+      result = (t, l2.arguments[i])
+      i.inc
+  )
+
+proc search(interpreter: Interpreter, target: Literal): Clause =
+  let ¬target = ¬ target
+  for c in interpreter:
+    if c[0] == ¬target and can_make_unificate(c[0], target):
+      return c
+  
+  @[]
+
+proc is_contradiction(i: Interpreter, c: Clause): bool =
+  let clause = search(i, c[0])
+
+  if clause == @[]: return false
+
+  let
+    u = make_unificate(clause[0], c[0])
+    resoluted_clause = clause.unificate(u)
+    resolvent = resolute(resoluted_clause, c)
+
+  if resolvent == @[]:
+    true
+  else:
+    is_contradiction(i, resolvent)
+
+proc probable(i: Interpreter, l: Literal): bool =
+  is_contradiction(i, @[¬ l])
+
+proc switch(u: Unificate): Unificate =
+  u.mapIt((it.b, it.a))
+
+proc search_solution(i: Interpreter, l: Literal): Unificate =
+  let clause = search(i, l)
+  if clause == @[]: return @[]
+
+  let
+    u = make_unificate(clause[0], l).switch
+    resoluted_clause = @[l].unificate(u)
+    resolvent = resolute(resoluted_clause, clause)
+
+  if resolvent == @[]:
+    concat(
+      u.filterIt((it.a.kind, it.b.kind) == (Variable, Atom)),
+      search_solution(i.filterIt(it != clause), l)
+    )
+  else:
+    search_solution(i, resolvent[0])
