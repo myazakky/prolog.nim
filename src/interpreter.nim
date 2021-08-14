@@ -1,66 +1,5 @@
-import sequtils, strformat, tables, hashes
-
-type TermKind* = enum
-  Variable
-  Atom
-
-type Term* = ref object
-  case kind*: TermKind
-  of Variable:
-    variableName*: string
-  of Atom:
-    atomValue*: string
-
-proc hash(t: Term): Hash =
-  case t.kind
-  of Variable:
-    t.variableName.hash
-  of Atom:
-    t.atomValue.hash
-
-func `$`(t: Term): string =
-  case t.kind:
-  of Variable: t.variableName & ": Var"
-  of Atom: t.atomValue & ": Atom"
-
-func `==`(t, u: Term): bool =
-  if t.kind != u.kind: return false
-
-  case t.kind
-  of Variable:
-    t.variableName == u.variableName
-  of Atom:
-    t.atomValue == u.atomValue
-
-type Literal* = ref object
-  is_negative*: bool
-  name*: string
-  arguments*: seq[Term]
-
-proc new_literal*(is_negative = false, name = "", arguments: seq[Term] = @[]): Literal =
-  Literal(
-    is_negative: is_negative,
-    name: name,
-    arguments: arguments
-  )
-
-func `¬`(literal: Literal): Literal =
-  Literal(
-    is_negative: not literal.is_negative,
-    name: literal.name,
-    arguments: literal.arguments)
-
-func `$`*(l: Literal): string =
-  let prefix = if l.is_negative: "¬" else: ""
-  result = prefix & l.name & $l.arguments
-
-func `==`(l, m: Literal): bool = 
-  l.is_negative == m.is_negative and l.name == m.name
-
-func `===`(l, m: Literal): bool =
-  l == m and (l.arguments == m.arguments)
-
-type Clause* = seq[Literal]
+import sequtils, tables
+import lexer
 
 type Unificate = seq[tuple[a: Term, b: Term]]
 
@@ -76,7 +15,7 @@ func unificate(c: Clause, u: Unificate): Clause =
       name: l.name,
       arguments: arguments))
 
-type Interpreter = seq[Clause]
+type Interpreter* = seq[Clause]
 
 proc resolute(c1, c2: Clause): Clause =
   if c1.len >= c2.len:
@@ -144,7 +83,26 @@ proc search_solution(i: Interpreter, l: Literal): Unificate =
   if resolvent == @[]:
     concat(
       u.filterIt((it.a.kind, it.b.kind) == (Variable, Atom)),
-      search_solution(i.filterIt(it != clause), l)
+      search_solution(i.filterIt(it !== clause), l)
     )
   else:
     search_solution(i, resolvent[0])
+
+proc search_solutions(i: Interpreter, c: Clause): Unificate =
+  c.mapIt(i.search_solution(it)).foldl(concat(a.filterIt(b.contains(it)), b))
+
+proc run*(i: var Interpreter) =
+  var parsed: seq[string]
+  while true:
+    write(stdout, ">> ")
+    parsed = readLine(stdin).parse
+    if parsed[0] == ":-":
+      var tokenized = parsed.tokenize
+      if tokenized.anyIt(it.have_variable):
+        echo i.search_solution(tokenized[0])
+        echo i.search_solutions(tokenized)
+      else:
+        echo i.is_contradiction(tokenized)
+    else:
+      echo parsed.tokenize
+      i.add(parsed.tokenize)
