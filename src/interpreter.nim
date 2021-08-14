@@ -1,15 +1,15 @@
 import sequtils, strformat, tables, hashes
 
-type TermKind = enum
+type TermKind* = enum
   Variable
   Atom
 
-type Term = ref object
-  case kind: TermKind
+type Term* = ref object
+  case kind*: TermKind
   of Variable:
-    variableName: string
+    variableName*: string
   of Atom:
-    atomValue: string
+    atomValue*: string
 
 proc hash(t: Term): Hash =
   case t.kind
@@ -20,8 +20,8 @@ proc hash(t: Term): Hash =
 
 func `$`(t: Term): string =
   case t.kind:
-  of Variable: t.variableName
-  of Atom: t.atomValue
+  of Variable: t.variableName & ": Var"
+  of Atom: t.atomValue & ": Atom"
 
 func `==`(t, u: Term): bool =
   if t.kind != u.kind: return false
@@ -32,10 +32,17 @@ func `==`(t, u: Term): bool =
   of Atom:
     t.atomValue == u.atomValue
 
-type Literal = ref object
-  is_negative: bool
-  name: string
-  arguments: seq[Term]
+type Literal* = ref object
+  is_negative*: bool
+  name*: string
+  arguments*: seq[Term]
+
+proc new_literal*(is_negative = false, name = "", arguments: seq[Term] = @[]): Literal =
+  Literal(
+    is_negative: is_negative,
+    name: name,
+    arguments: arguments
+  )
 
 func `¬`(literal: Literal): Literal =
   Literal(
@@ -43,7 +50,7 @@ func `¬`(literal: Literal): Literal =
     name: literal.name,
     arguments: literal.arguments)
 
-func `$`(l: Literal): string =
+func `$`*(l: Literal): string =
   let prefix = if l.is_negative: "¬" else: ""
   result = prefix & l.name & $l.arguments
 
@@ -53,7 +60,7 @@ func `==`(l, m: Literal): bool =
 func `===`(l, m: Literal): bool =
   l == m and (l.arguments == m.arguments)
 
-type Clause = seq[Literal]
+type Clause* = seq[Literal]
 
 type Unificate = seq[tuple[a: Term, b: Term]]
 
