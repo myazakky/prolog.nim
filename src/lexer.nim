@@ -74,21 +74,26 @@ proc parse*(program: string): seq[string] =
   var tokens = @[""]
   var token_number = 0
   for c in chars:
-    if c == " ":
+    case c
+    of " ":
       tokens.add("")
       token_number.inc
-    elif @["(", ")"].contains(c):
+    of "(":
+      tokens.add(c)
+      tokens.add("")
+      token_number += 2
+    of ")":
       tokens.add(c)
       tokens.add("")
       token_number += 2
     else:
       tokens[token_number] &= c.replace(".", "").replace(",", "")
   
-  tokens
+  tokens.filterIt(it != "")
 
 proc tokenize*(tokens: seq[string]): Clause =
   var clause: seq[Literal]
-  var literal = new_literal()
+  var literal: Literal
   var is_analyzing_arguments = false
   var in_antecedent = false
 
@@ -96,7 +101,6 @@ proc tokenize*(tokens: seq[string]): Clause =
     case t:
     of ":-":
       in_antecedent = true
-      literal.is_negative = true
       continue
     of "(":
       is_analyzing_arguments = true
@@ -104,7 +108,6 @@ proc tokenize*(tokens: seq[string]): Clause =
     of ")":
       is_analyzing_arguments = false
       clause.add(literal)
-      literal = new_literal(is_negative = in_antecedent)
       continue
 
     if is_analyzing_arguments and t[0].isUpperAscii:
@@ -118,6 +121,6 @@ proc tokenize*(tokens: seq[string]): Clause =
         atomValue: t
       ))
     else:
-      literal.name = t
-  clause.add(literal)
+      literal = new_literal(is_negative = in_antecedent, name = t)
+
   clause

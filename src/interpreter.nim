@@ -1,5 +1,10 @@
-import sequtils, tables
+import sequtils, tables, strutils
 import lexer
+
+type Pair = tuple[a: Term, b: Term]
+
+func `$`(p: Pair): string =
+  $p[0] & " = " & $p[1]
 
 type Unificate = seq[tuple[a: Term, b: Term]]
 
@@ -89,20 +94,18 @@ proc search_solution(i: Interpreter, l: Literal): Unificate =
     search_solution(i, resolvent[0])
 
 proc search_solutions(i: Interpreter, c: Clause): Unificate =
-  c.mapIt(i.search_solution(it)).foldl(concat(a.filterIt(b.contains(it)), b))
+  c.mapIt(i.search_solution(it)).foldl(concat(a.filterIt(b.contains(it)), b)).deduplicate
 
 proc run*(i: var Interpreter) =
   var parsed: seq[string]
   while true:
     write(stdout, ">> ")
-    parsed = readLine(stdin).parse
+    parsed = readLine(stdin).replace("\n", "").parse
     if parsed[0] == ":-":
       var tokenized = parsed.tokenize
       if tokenized.anyIt(it.have_variable):
-        echo i.search_solution(tokenized[0])
         echo i.search_solutions(tokenized)
       else:
         echo i.is_contradiction(tokenized)
     else:
-      echo parsed.tokenize
       i.add(parsed.tokenize)
