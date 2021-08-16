@@ -44,11 +44,11 @@ proc newLiteral*(isNegative = false, name = "", arguments: seq[Term] = @[]): Lit
     arguments: arguments
   )
 
-func `¬`*(literal: Literal): Literal =
+func `¬`*(l: Literal): Literal =
   Literal(
-    isNegative: not literal.isNegative,
-    name: literal.name,
-    arguments: literal.arguments)
+    isNegative: not l.isNegative,
+    name: l.name,
+    arguments: l.arguments)
 
 func `$`*(l: Literal): string =
   let prefix = if l.isNegative: "¬" else: ""
@@ -78,11 +78,7 @@ proc parse*(program: string): seq[string] =
     of " ":
       tokens.add("")
       tokenNumber.inc
-    of "(":
-      tokens.add(c)
-      tokens.add("")
-      tokenNumber += 2
-    of ")":
+    of "(", ")":
       tokens.add(c)
       tokens.add("")
       tokenNumber += 2
@@ -93,7 +89,6 @@ proc parse*(program: string): seq[string] =
 
 proc tokenize*(tokens: seq[string]): Clause =
   var clause: seq[Literal]
-  var literal: Literal
   var isAnalyzingArguments = false
   var inAntecedent = false
 
@@ -107,20 +102,19 @@ proc tokenize*(tokens: seq[string]): Clause =
       continue
     of ")":
       isAnalyzingArguments = false
-      clause.add(literal)
       continue
 
     if isAnalyzingArguments and t[0].isUpperAscii:
-      literal.arguments.add(Term(
+      clause[-1].arguments.add(Term(
         kind: Variable,
         variableName: t
       ))
-    elif isAnalyzingArguments and t[0].isLowerAscii:
-      literal.arguments.add(Term(
+    elif isAnalyzingArguments and not t[0].isUpperAscii:
+      clause[-1].arguments.add(Term(
         kind: Atom,
         atomValue: t
       ))
     else:
-      literal = newLiteral(isNegative = inAntecedent, name = t)
+      clause.add(newLiteral(isNegative = inAntecedent, name = t))
 
   clause

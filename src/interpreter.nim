@@ -6,9 +6,9 @@ type Pair = tuple[a: Term, b: Term]
 func `$`(p: Pair): string =
   $p[0] & " = " & $p[1]
 
-type Unificate = seq[tuple[a: Term, b: Term]]
+type Unification = seq[tuple[a: Term, b: Term]]
 
-func unificate(c: Clause, u: Unificate): Clause =
+func unify(c: Clause, u: Unification): Clause =
   let unificationTable = u.toTable
   c.map(proc(l: Literal): Literal =
     let arguments = l.arguments.mapIt(
@@ -30,7 +30,7 @@ proc resolute(c1, c2: Clause): Clause =
     c2.filter(proc (l: Literal): bool =
       not c1.anyIt(it === ¬ l))
 
-proc canMakeUnificate(l1, l2: Literal): bool =
+proc canUnify(l1, l2: Literal): bool =
   var i = 0
   l1.arguments.all(
     proc(t: Term): bool =
@@ -40,7 +40,7 @@ proc canMakeUnificate(l1, l2: Literal): bool =
     i.inc
   )
 
-proc makeUnificate(l1, l2: Literal): Unificate =
+proc makeUnification(l1, l2: Literal): Unification =
   var i = 0
   l1.arguments.map(
     proc(t: Term): tuple[a: Term, b: Term] =
@@ -48,63 +48,65 @@ proc makeUnificate(l1, l2: Literal): Unificate =
     i.inc
   )
 
-proc search(interpreter: Interpreter, target: Literal): Clause =
+proc searchClue(interpreter: Interpreter, target: Literal): Clause =
   let ¬target = ¬ target
   for c in interpreter:
-    if c[0] == ¬target and canMakeUnificate(c[0], target):
+    if c[0] == ¬target and canUnify(c[0], target):
       return c
 
   @[]
 
-proc isContradiction(i: Interpreter, c: Clause): bool =
-  let clause = search(i, c[0])
+proc isContradiction(interpreter: Interpreter, targetClause: Clause): bool =
+  let clueClause = searchClue(interpreter, targetClause[0])
 
-  if clause == @[]: return false
+  if clueClause == @[]: return false
 
   let
-    u = makeUnificate(clause[0], c[0])
-    resolutedClause = clause.unificate(u)
-    resolvent = resolute(resolutedClause, c)
+    u = makeUnification(clueClause[0], targetClause[0])
+    resolutedClause = clueClause.unify(u)
+    resolvent = resolute(resolutedClause, targetClause)
 
   if resolvent == @[]:
     true
   else:
-    isContradiction(i, resolvent)
+    isContradiction(interpreter, resolvent)
 
-proc switch(u: Unificate): Unificate =
+proc switch(u: Unification): Unification =
   u.mapIt((it.b, it.a))
 
-proc searchSolution(i: Interpreter, l: Literal): Unificate =
-  let clause = search(i, l)
-  if clause == @[]: return @[]
+proc searchSolution(interpreter: Interpreter, literal: Literal): Unification =
+  let clueClause = searchClue(interpreter, literal)
+  if clueClause == @[]: return @[]
 
   let
-    u = makeUnificate(clause[0], l).switch
-    resolutedClause = @[l].unificate(u)
-    resolvent = resolute(resolutedClause, clause)
+    u = makeUnification(clueClause[0], literal).switch
+    resolutedClause = @[literal].unify(u)
+    resolvent = resolute(resolutedClause, clueClause)
 
   if resolvent == @[]:
     concat(
       u.filterIt((it.a.kind, it.b.kind) == (Variable, Atom)),
-      searchSolution(i.filterIt(it !== clause), l)
+      searchSolution(interpreter.filterIt(it !== clueClause), literal)
     )
   else:
-    searchSolution(i, resolvent[0])
+    searchSolution(interpreter, resolvent[0])
 
-proc searchSolutions(i: Interpreter, c: Clause): Unificate =
+proc searchSolutions(i: Interpreter, c: Clause): Unification =
   c.mapIt(i.searchSolution(it)).foldl(concat(a.filterIt(b.contains(it)),
       b)).deduplicate
 
 proc run*(i: var Interpreter) =
   var parsed: seq[string]
+  var tokenized: seq[Literal]
+
   while true:
     write(stdout, ">> ")
     parsed = readLine(stdin).replace("\n", "").parse
+    tokenized = parsed.tokenize
     if parsed[0] == ":-":
-      var tokenized = parsed.tokenize
       if tokenized.anyIt(it.haveVariable):
         echo i.searchSolutions(tokenized)
       else:
         echo i.isContradiction(tokenized)
     else:
-      i.add(parsed.tokenize)
+      i.add(tokenized)
