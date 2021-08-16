@@ -91,6 +91,7 @@ proc tokenize*(tokens: seq[string]): Clause =
   var clause: seq[Literal]
   var isAnalyzingArguments = false
   var inAntecedent = false
+  var isNegative = false
 
   for t in tokens:
     case t:
@@ -103,6 +104,9 @@ proc tokenize*(tokens: seq[string]): Clause =
     of ")":
       isAnalyzingArguments = false
       continue
+    of "¬":
+      isNegative = true
+      continue
 
     if isAnalyzingArguments and t[0].isUpperAscii:
       clause[-1].arguments.add(Term(
@@ -114,6 +118,8 @@ proc tokenize*(tokens: seq[string]): Clause =
         kind: Atom,
         atomValue: t
       ))
+    elif isNegative:
+      clause.add(newLiteral(isNegative = not inAntecedent, name = t))
     else:
       clause.add(newLiteral(isNegative = inAntecedent, name = t))
 
