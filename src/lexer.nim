@@ -109,12 +109,12 @@ proc tokenize*(tokens: seq[string]): Clause =
       continue
 
     if isAnalyzingArguments and t[0].isUpperAscii:
-      clause[-1].arguments.add(Term(
+      clause[clause.len - 1].arguments.add(Term(
         kind: Variable,
         variableName: t
       ))
     elif isAnalyzingArguments and not t[0].isUpperAscii:
-      clause[-1].arguments.add(Term(
+      clause[clause.len - 1].arguments.add(Term(
         kind: Atom,
         atomValue: t
       ))
