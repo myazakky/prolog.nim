@@ -23,44 +23,44 @@ func `$`*(t: Term): string =
   of Variable: t.variableName & ": Var"
   of Atom: t.atomValue & ": Atom"
 
-func `==`*(t, u: Term): bool =
-  if t.kind != u.kind: return false
+func `==`*(t1, t2: Term): bool =
+  if t1.kind != t2.kind: return false
 
-  case t.kind
+  case t1.kind
   of Variable:
-    t.variableName == u.variableName
+    t1.variableName == t2.variableName
   of Atom:
-    t.atomValue == u.atomValue
+    t1.atomValue == t2.atomValue
 
 type Literal* = ref object
-  is_negative*: bool
+  isNegative*: bool
   name*: string
   arguments*: seq[Term]
 
-proc new_literal*(is_negative = false, name = "", arguments: seq[Term] = @[]): Literal =
+proc newLiteral*(isNegative = false, name = "", arguments: seq[Term] = @[]): Literal =
   Literal(
-    is_negative: is_negative,
+    isNegative: isNegative,
     name: name,
     arguments: arguments
   )
 
 func `¬`*(literal: Literal): Literal =
   Literal(
-    is_negative: not literal.is_negative,
+    isNegative: not literal.isNegative,
     name: literal.name,
     arguments: literal.arguments)
 
 func `$`*(l: Literal): string =
-  let prefix = if l.is_negative: "¬" else: ""
+  let prefix = if l.isNegative: "¬" else: ""
   result = prefix & l.name & $l.arguments
 
-func `==`*(l, m: Literal): bool = 
-  l.is_negative == m.is_negative and l.name == m.name
+func `==`*(l1, l2: Literal): bool =
+  l1.isNegative == l2.isNegative and l1.name == l2.name
 
-func `===`*(l, m: Literal): bool =
-  l == m and (l.arguments == m.arguments)
+func `===`*(l1, l2: Literal): bool =
+  l1 == l2 and (l1.arguments == l2.arguments)
 
-proc have_variable*(l: Literal): bool =
+proc haveVariable*(l: Literal): bool =
   l.arguments.anyIt(it.kind == Variable)
 
 type Clause* = seq[Literal]
@@ -72,55 +72,55 @@ proc parse*(program: string): seq[string] =
   let chars = program.split(re"")
 
   var tokens = @[""]
-  var token_number = 0
+  var tokenNumber = 0
   for c in chars:
     case c
     of " ":
       tokens.add("")
-      token_number.inc
+      tokenNumber.inc
     of "(":
       tokens.add(c)
       tokens.add("")
-      token_number += 2
+      tokenNumber += 2
     of ")":
       tokens.add(c)
       tokens.add("")
-      token_number += 2
+      tokenNumber += 2
     else:
-      tokens[token_number] &= c.replace(".", "").replace(",", "")
-  
+      tokens[tokenNumber] &= c.replace(".", "").replace(",", "")
+
   tokens.filterIt(it != "")
 
 proc tokenize*(tokens: seq[string]): Clause =
   var clause: seq[Literal]
   var literal: Literal
-  var is_analyzing_arguments = false
-  var in_antecedent = false
+  var isAnalyzingArguments = false
+  var inAntecedent = false
 
   for t in tokens:
     case t:
     of ":-":
-      in_antecedent = true
+      inAntecedent = true
       continue
     of "(":
-      is_analyzing_arguments = true
+      isAnalyzingArguments = true
       continue
     of ")":
-      is_analyzing_arguments = false
+      isAnalyzingArguments = false
       clause.add(literal)
       continue
 
-    if is_analyzing_arguments and t[0].isUpperAscii:
+    if isAnalyzingArguments and t[0].isUpperAscii:
       literal.arguments.add(Term(
         kind: Variable,
         variableName: t
       ))
-    elif is_analyzing_arguments and t[0].isLowerAscii:
+    elif isAnalyzingArguments and t[0].isLowerAscii:
       literal.arguments.add(Term(
         kind: Atom,
         atomValue: t
       ))
     else:
-      literal = new_literal(is_negative = in_antecedent, name = t)
+      literal = newLiteral(isNegative = inAntecedent, name = t)
 
   clause
